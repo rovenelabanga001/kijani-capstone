@@ -2,11 +2,10 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY       = "localhost:5000"
-        IMAGE_NAME     = "kijani/kk-payments"
-        STAGING_NS     = "kijani-staging"
-        PROD_NS        = "default"
-        K8S_DIR        = "k8s"
+        REGISTRY   = "localhost:5000"
+        IMAGE_NAME = "kijani/kk-payments"
+        STAGING_NS = "kijani-staging"
+        PROD_NS    = "default"
     }
 
     stages {
@@ -23,7 +22,7 @@ pipeline {
                             returnStdout: true
                         ).trim()
                         env.IMAGE_TAG = "${pkgVersion}-${gitShort}"
-                        echo "Building image: ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+                        echo "Building: ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
                     }
                     sh """
                         docker build \
@@ -38,7 +37,7 @@ pipeline {
         stage('Push') {
             steps {
                 sh "docker push ${REGISTRY}/${IMAGE_NAME}:${env.IMAGE_TAG}"
-                echo "Pushed: ${REGISTRY}/${IMAGE_NAME}:${env.IMAGE_TAG}"
+                echo "Pushed: ${env.IMAGE_TAG}"
             }
         }
 
@@ -58,31 +57,29 @@ pipeline {
         stage('Smoke test') {
             steps {
                 script {
-                    def maxRetries = 5
-                    def retryCount = 0
                     def passed = false
-
-                    while (retryCount < maxRetries && !passed) {
+                    for (int i = 1; i <= 5; i++) {
                         def status = sh(
-                            script: """
-                                curl -s -o /dev/null -w "%{http_code}" \
-                                http://kijani-staging.local/payments/health
-                            """,
+                            script: "curl -s -o /dev/null -w '%{http_code}' http://kijani-staging.local/payments/health",
                             returnStdout: true
                         ).trim()
 
                         if (status == "200") {
-                            echo "Smoke test passed — staging health endpoint returned 200"
+                            echo "Smoke test passed on attempt ${i}"
                             passed = true
-                        } else {
-                            retryCount++
-                            echo "Smoke test attempt ${retryCount}/${maxRetries} — got ${status}, retrying in 10s"
-                            sleep 10
+                            break
                         }
+                        echo "Attempt ${i}/5 — got ${status}, waiting 10s"
+                        sleep 10
                     }
 
                     if (!passed) {
-                        error "Smoke test FAILED after ${maxRetries} attempts — blocking production approval gate"
+                        echo "Smoke test failed — running AI diagnosis"
+                        withCredentials([string(credentialsId: 'anthropic-api-key',
+                                               variable: 'ANTHROPIC_API_KEY')]) {
+                            sh "bash scripts/diagnose-failure.sh ${STAGING_NS}"
+                        }
+                        error "Smoke test failed — review AI diagnosis above before taking action"
                     }
                 }
             }
@@ -91,21 +88,21 @@ pipeline {
         stage('Approval gate') {
             steps {
                 script {
-                    def approvalInput = input(
-                        message: "Staging smoke test passed. Approve production deployment?",
+                    def approval = input(
+                        message: "Smoke test passed. Approve production deployment?",
                         parameters: [
                             string(
-                                name: 'APPROVAL_REASON',
-                                description: 'State the reason for approving this deployment',
+                                name: 'REASON',
+                                description: 'Why are you approving this deployment?',
                                 defaultValue: ''
                             )
                         ],
                         submitterParameter: 'APPROVER'
                     )
-                    echo "Production deployment approved by: ${approvalInput['APPROVER']}"
-                    echo "Approval reason: ${approvalInput['APPROVAL_REASON']}"
-                    env.APPROVER = approvalInput['APPROVER']
-                    env.APPROVAL_REASON = approvalInput['APPROVAL_REASON']
+                    echo "Approved by: ${approval['APPROVER']}"
+                    echo "Reason: ${approval['REASON']}"
+                    env.APPROVER = approval['APPROVER']
+                    env.REASON = approval['REASON']
                 }
             }
         }
@@ -121,20 +118,18 @@ pipeline {
                         --timeout=120s
                 """
                 echo "Production deployment complete: ${env.IMAGE_TAG}"
-                echo "Approved by: ${env.APPROVER} — ${env.APPROVAL_REASON}"
+                echo "Approved by: ${env.APPROVER} — ${env.REASON}"
             }
         }
     }
 
     post {
         success {
-            echo "Pipeline complete — ${env.IMAGE_TAG} deployed to production"
+            echo "Pipeline complete — ${env.IMAGE_TAG} is live in production"
         }
         failure {
-            echo "Pipeline FAILED — rolling back staging"
-            sh """
-                kubectl rollout undo deployment/kk-payments -n ${STAGING_NS} || true
-            """
+            echo "Pipeline failed — rolling back staging"
+            sh "kubectl rollout undo deployment/kk-payments -n ${STAGING_NS} || true"
         }
     }
 }
