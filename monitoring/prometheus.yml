@@ -1,0 +1,9 @@
+# Prometheus is installed via Helm (kube-prometheus-stack)
+# Run: helm install prometheus prometheus-community/kube-prometheus-stack \
+#        --namespace monitoring \
+#        --create-namespace \
+#        --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+#        --set alertmanager.enabled=true \
+#        --set grafana.enabled=false
+#
+# Alert rules are in alerts.yml — applied with kubectl apply -f monitoring/alerts.yml
