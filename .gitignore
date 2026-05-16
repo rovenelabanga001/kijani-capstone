@@ -1,8 +1,11 @@
 terraform/.terraform/
 terraform/.terraform.lock.hcl
-terraform/.terraform.tfstate
-terraform/.terraform.tfstate.backup
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
 terraform/*.tfvars
+terraform/tfplan
+
+ansible/playbook.yml
 
 .env
 .env.*
@@ -11,4 +14,5 @@ terraform/*.tfvars
 *.log
 
 # OS files
-.DS_Store
+.DS_Storetfplan
+ansible/playbook.yml
