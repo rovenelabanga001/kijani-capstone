@@ -1,0 +1,67 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kk-payments-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus
+    app: kube-prometheus-stack
+spec:
+  groups:
+  - name: kk-payments
+    interval: 30s
+    rules:
+
+    - alert: KkPaymentsPodCrashLooping
+      expr: |
+        increase(kube_pod_container_status_restarts_total{
+          namespace=~"kijani-staging|default",
+          pod=~"kk-payments-.*"
+        }[5m]) > 2
+      for: 1m
+      labels:
+        severity: critical
+        service: kk-payments
+      annotations:
+        summary: "kk-payments Pod is crash looping"
+        description: >
+          Pod {{ $labels.pod }} in namespace {{ $labels.namespace }}
+          has restarted more than 2 times in the last 5 minutes.
+          This indicates a crash loop that requires immediate attention.
+
+    - alert: KkPaymentsPodsNotReady
+      expr: |
+        kube_deployment_status_replicas_ready{
+          namespace=~"kijani-staging|default",
+          deployment="kk-payments"
+        } < kube_deployment_spec_replicas{
+          namespace=~"kijani-staging|default",
+          deployment="kk-payments"
+        }
+      for: 2m
+      labels:
+        severity: warning
+        service: kk-payments
+      annotations:
+        summary: "kk-payments has fewer ready replicas than desired"
+        description: >
+          Deployment kk-payments in namespace {{ $labels.namespace }}
+          has {{ $value }} ready replicas but expects more.
+          Check pod status and recent events.
+
+    - alert: KkPaymentsDeploymentUnavailable
+      expr: |
+        kube_deployment_status_replicas_available{
+          namespace=~"kijani-staging|default",
+          deployment="kk-payments"
+        } == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: kk-payments
+      annotations:
+        summary: "kk-payments has zero available replicas"
+        description: >
+          Deployment kk-payments in namespace {{ $labels.namespace }}
+          has no available replicas. The service is completely down.
+          Immediate rollback required.
