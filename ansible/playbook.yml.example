@@ -1,0 +1,53 @@
+---
+- name: Configure kijani-staging namespace
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    k8s_namespace: kijani-staging
+
+  tasks:
+    - name: Apply staging ConfigMap
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: kk-payments-config
+            namespace: "{{ k8s_namespace }}"
+          data:
+            NODE_ENV: staging
+            DB_HOST: postgres-staging.kijani.internal
+            DB_PORT: "5432"
+            LOG_LEVEL: debug
+            APP_PORT: "3000"
+            MAX_CONNECTIONS: "5"
+
+    - name: Create staging Secret
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: kk-payments-secrets
+            namespace: "{{ k8s_namespace }}"
+          type: Opaque
+          stringData:
+            DB_PASSWORD: replace-with-real-password
+            STRIPE_API_KEY: replace-with-real-key
+            JWT_SECRET: replace-with-real-secret
+
+    - name: Verify ConfigMap exists
+      kubernetes.core.k8s_info:
+        kind: ConfigMap
+        name: kk-payments-config
+        namespace: "{{ k8s_namespace }}"
+      register: configmap_result
+
+    - name: Print ConfigMap status
+      debug:
+        msg: "ConfigMap kk-payments-config exists in {{ k8s_namespace }}"
+      when: configmap_result.resources | length > 0
