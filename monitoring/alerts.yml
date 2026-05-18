@@ -1,3 +1,9 @@
+# IMPORTANT: The labels below (release: prometheus, app: kube-prometheus-stack)
+# are required for the kube-prometheus-stack operator to discover this PrometheusRule.
+# Without them the rules are created successfully but silently ignored by Prometheus.
+# Verify discovery with: curl -s http://localhost:9090/api/v1/rules | python3 -c
+# "import json,sys; [print(g['name']) for g in json.load(sys.stdin)['data']['groups']]"
+
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
