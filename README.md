@@ -74,7 +74,9 @@ cd ..
 ```bash
 # Copy the example playbook and fill in real credentials
 cp ansible/playbook.yml.example ansible/playbook.yml
-# Edit ansible/playbook.yml and replace placeholder values with real credentials
+# Edit ansible/playbook.yml and replace these three fields with real values:
+# DB_PASSWORD, STRIPE_API_KEY, JWT_SECRET
+# Placeholder values are acceptable for a local lab environment
 ansible-playbook ansible/playbook.yml -i ansible/inventory/hosts.yml
 ```
 
